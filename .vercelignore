@@ -1,0 +1,5 @@
+# Ignorar bases CSV pesadas (DuckDB compilado de 15MB ja contem tudo)
+3_Base_Analitica_Final/*.csv
+.git
+__pycache__
+*.pyc

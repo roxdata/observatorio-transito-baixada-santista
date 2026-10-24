@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chuva e Sinistros de Trânsito na Baixada Santista, 2022–2025 | PI2 FATEC</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+</head>
+<body>
+<div class="page">
+
+    <!-- Cabeçalho editorial -->
+    <header class="masthead">
+        <p class="kicker">Observatório de Trânsito e Clima · Projeto Integrador II · FATEC Baixada Santista</p>
+        <h1>Chuva e sinistros de trânsito na Baixada Santista, 2022–2025</h1>
+        <p class="dek">
+            534.771 sinistros do RENAEST cruzados hora a hora com estações automáticas do INMET
+            nos 9 municípios da RMBS. Pista molhada definida por chuva acumulada &gt; 5,0 mm em 3 h
+            ou registro no boletim de ocorrência.
+        </p>
+    </header>
+
+    <!-- Barra de filtros -->
+    <section class="toolbar" aria-label="Filtros">
+        <div class="field">
+            <label for="filter-ano">Ano</label>
+            <select id="filter-ano">
+                <option value="0">2022–2025</option>
+                <option value="2022">2022</option>
+                <option value="2023">2023</option>
+                <option value="2024">2024</option>
+                <option value="2025">2025</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="filter-mes">Mês</label>
+            <select id="filter-mes">
+                <option value="0">Todos</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                <option value="3">Março</option><option value="4">Abril</option>
+                <option value="5">Maio</option><option value="6">Junho</option>
+                <option value="7">Julho</option><option value="8">Agosto</option>
+                <option value="9">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="filter-mun">Município</label>
+            <select id="filter-mun">
+                <option value="TODOS">Todos os 9 municípios</option>
+                <option value="SANTOS">Santos</option>
+                <option value="SAO VICENTE">São Vicente</option>
+                <option value="PRAIA GRANDE">Praia Grande</option>
+                <option value="GUARUJA">Guarujá</option>
+                <option value="CUBATAO">Cubatão</option>
+                <option value="BERTIOGA">Bertioga</option>
+                <option value="ITANHAEM">Itanhaém</option>
+                <option value="PERUIBE">Peruíbe</option>
+                <option value="MONGAGUA">Mongaguá</option>
+            </select>
+        </div>
+        <button id="btn-reset-filters" class="btn btn-ghost" type="button">Limpar filtros</button>
+        <p class="toolbar-hint">Clique em barras, meses ou pontos do mapa para filtrar todo o painel.</p>
+    </section>
+
+    <div id="active-filters-container" class="active-filters" style="display: none;">
+        <span class="active-filters-label">Filtros ativos</span>
+        <div id="active-filters-chips" class="active-filters-chips"></div>
+        <button id="btn-clear-cross-filters" class="link-btn" type="button">remover todos</button>
+    </div>
+
+    <div class="notice" id="coverage-notice" style="display: none;">
+        <strong>Nota de auditoria.</strong> Os pacotes mensais do RENAEST são cumulativos; os 12 meses de 2023
+        (inclusive janeiro e junho) foram recompostos por deduplicação de <code>num_acidente</code>.
+    </div>
+
+    <!-- Achado principal -->
+    <section class="headline" aria-live="polite">
+        <p class="headline-label">Achado principal do recorte</p>
+        <p class="headline-text" id="headline-finding">Calculando…</p>
+    </section>
+
+    <!-- Legenda Fixa das Hipóteses Científicas -->
+    <aside class="hypothesis-bar" aria-label="Hipóteses científicas do estudo">
+        <div class="hyp-item">
+            <span class="hyp-tag hyp-null">H₀ · Nula</span>
+            <span class="hyp-desc">Chuva acumulada (&gt; 5,0 mm/3h) e condição de pista molhada <strong>não alteram</strong> a severidade nem a distribuição espacial dos sinistros (OR ≈ 1,00; p ≥ 0,05).</span>
+        </div>
+        <div class="hyp-item">
+            <span class="hyp-tag hyp-h1">H₁ · Severidade</span>
+            <span class="hyp-desc">Pista molhada <strong>eleva significativamente</strong> a chance de sinistros com vítimas (OR = 1,601; χ² = 3.276,7; p &lt; 0,001).</span>
+        </div>
+        <div class="hyp-item">
+            <span class="hyp-tag hyp-h2">H₂ · Dinâmica Rodoviária</span>
+            <span class="hyp-desc">Precipitação intensa <strong>concentra o risco</strong> em eixos rodoviários (Anchieta-Imigrantes, SP-055 e BR-101) (χ² = 394,8; p &lt; 0,001).</span>
+        </div>
+    </aside>
+
+    <!-- Faixa de KPIs -->
+    <section class="kpi-strip" aria-label="Indicadores">
+        <div class="kpi kpi-lead">
+            <span class="kpi-label">Sinistros</span>
+            <span class="kpi-value" id="kpi-total">—</span>
+            <span class="kpi-note">registros únicos</span>
+        </div>
+        <div class="kpi">
+            <span class="kpi-label">Com vítimas</span>
+            <span class="kpi-value" id="kpi-vitimas">—</span>
+            <span class="kpi-note">OR chuva <b id="kpi-or-subtext">—</b></span>
+        </div>
+        <div class="kpi">
+            <span class="kpi-label">Fatais</span>
+            <span class="kpi-value kpi-fatal" id="kpi-fatais">—</span>
+            <span class="kpi-note">letalidade <b id="kpi-taxa-let">—</b></span>
+        </div>
+        <div class="kpi">
+            <span class="kpi-label">Pista molhada</span>
+            <span class="kpi-value kpi-rain" id="kpi-chuva">—</span>
+            <span class="kpi-note"><b id="kpi-pct-chuva">—</b> do total</span>
+        </div>
+        <div class="kpi">
+            <span class="kpi-label">Em rodovias</span>
+            <span class="kpi-value" id="kpi-rodovias">—</span>
+            <span class="kpi-note"><b id="kpi-pct-rodovias">—</b> do total</span>
+        </div>
+    </section>
+
+    <!-- Mapa + evidência -->
+    <section class="grid grid-map">
+        <article class="panel">
+            <header class="panel-head">
+                <h2>Onde os sinistros graves se concentram</h2>
+                <p class="panel-sub">Densidade de ocorrências; pontos marcam sinistros com vítima e fatais. Clique num ponto para filtrar o local.</p>
+            </header>
+            <div id="map-container" role="region" aria-label="Mapa de sinistros"></div>
+            <ul class="legend">
+                <li><span class="sw sw-injury"></span>Com vítima</li>
+                <li><span class="sw sw-fatal sw-lg"></span>Fatal</li>
+                <li><span class="sw-ramp"></span>Densidade (baixa → alta)</li>
+            </ul>
+        </article>
+
+        <article class="panel evidence" id="insights-panel">
+            <header class="panel-head">
+                <h2>Evidência estatística</h2>
+                <span class="verdict" id="insights-hypothesis-badge">calculando</span>
+            </header>
+
+            <p class="evidence-q">H₁: chuva/pista molhada aumenta a chance de um sinistro ter vítimas?</p>
+
+            <table class="ct" aria-label="Tabela de contingência">
+                <thead>
+                    <tr><th></th><th>Com vítima</th><th>Sem vítima</th></tr>
+                </thead>
+                <tbody>
+                    <tr><th>Pista molhada</th><td id="ct-a">—</td><td id="ct-b">—</td></tr>
+                    <tr><th>Pista seca</th><td id="ct-c">—</td><td id="ct-d">—</td></tr>
+                </tbody>
+            </table>
+
+            <dl class="stats">
+                <div><dt>Odds ratio</dt><dd id="insight-or-value">—</dd></div>
+                <div><dt>Variação da chance</dt><dd id="insight-risk-pct">—</dd></div>
+                <div><dt>χ² (1 g.l.)</dt><dd id="insight-chi2">—</dd></div>
+                <div><dt>Letalidade</dt><dd id="insight-letality">—</dd></div>
+            </dl>
+
+            <p class="evidence-text" id="insight-evidencia">—</p>
+
+            <h3 class="sub">Diagnóstico do recorte</h3>
+            <p class="evidence-text" id="insight-diagnostico">—</p>
+
+            <h3 class="sub">Recomendações</h3>
+            <ol class="recs" id="insight-recomendacoes"><li>—</li></ol>
+
+            <p class="source">Fonte: RENAEST/SENATRAN; INMET (A765, A712, A766, A771) via Haversine + IDW.
+                Método: tabela 2×2, χ² de Pearson e odds ratio (Agresti, 2013). Limiar 5 mm: Theofilatos &amp; Yannis (2014).</p>
+        </article>
+    </section>
+
+    <!-- Série temporal -->
+    <section class="grid grid-time">
+        <article class="panel">
+            <header class="panel-head">
+                <h2 id="takeaway-temporal">Sinistros por mês e chuva média</h2>
+                <p class="panel-sub">Painéis alinhados no mesmo eixo de tempo (sem eixo duplo). Clique num mês para filtrar.</p>
+            </header>
+            <div class="chart chart-tall"><canvas id="chart-temporal" aria-label="Série temporal"></canvas></div>
+        </article>
+
+        <article class="panel">
+            <header class="panel-head">
+                <h2 id="takeaway-severidade">Gravidade: pista seca × molhada</h2>
+                <p class="panel-sub">Percentual dos sinistros em cada condição. Clique para filtrar.</p>
+            </header>
+            <div class="chart chart-tall"><canvas id="chart-severidade" aria-label="Severidade por condição de pista"></canvas></div>
+            <p class="chart-notice" id="notice-severidade" style="display: none;"></p>
+        </article>
+    </section>
+
+    <!-- Barras categóricas -->
+    <section class="grid grid-two">
+        <article class="panel">
+            <header class="panel-head">
+                <h2 id="takeaway-municipios">Ocorrências por município</h2>
+                <p class="panel-sub">Clique numa barra para filtrar e centralizar o mapa.</p>
+            </header>
+            <div class="chart"><canvas id="chart-municipios" aria-label="Ocorrências por município"></canvas></div>
+        </article>
+
+        <article class="panel">
+            <header class="panel-head">
+                <h2 id="takeaway-tipos">Tipos de sinistro mais frequentes</h2>
+                <p class="panel-sub">Sete tipologias mais comuns (exclui “não informado”). Clique para filtrar.</p>
+            </header>
+            <div class="chart"><canvas id="chart-tipos" aria-label="Tipologias de sinistro"></canvas></div>
+            <p class="chart-notice" id="notice-tipos" style="display: none;"></p>
+        </article>
+    </section>
+
+    <!-- Rodapé metodológico -->
+    <footer class="colophon">
+        <div>
+            <h3>Dados</h3>
+            <p>RENAEST/SENATRAN, 48 pacotes mensais (2022–2025), deduplicados por <code>num_acidente</code>.
+               INMET, estações automáticas A765 Bertioga, A712 Iguape, A766 Registro, A771 Interlagos, A740 e A746.</p>
+        </div>
+        <div>
+            <h3>Método</h3>
+            <p>Pareamento município × hora; distância geodésica por Haversine (Sinnott, 1984) e interpolação IDW
+               (1/d²) para falhas de sensor. Pista molhada: chuva 3 h &gt; 5,0 mm (Theofilatos; Yannis, 2014; Edwards, 1998; WMO, 2018).
+               Random Forest (Breiman, 2001), ROC-AUC 0,995.</p>
+        </div>
+        <div>
+            <h3>Limitações</h3>
+            <p>Hora do sinistro aproximada pela fase do dia; em 2025, registros com <code>codigo_ibge = 0000000</code> (incluindo dezembro/2025) foram recuperados via coordenadas geodésicas costeiras, e novembro/2025 foi omitido pela SENATRAN na carga nacional de SP; a partir de março/2023 a SENATRAN exportou apenas óbitos (feridos não fatais = NI) para SP.</p>
+        </div>
+    </footer>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
