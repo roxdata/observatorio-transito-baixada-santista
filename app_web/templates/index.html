@@ -115,7 +115,7 @@
         <div class="kpi">
             <span class="kpi-label">Com vítimas</span>
             <span class="kpi-value" id="kpi-vitimas">—</span>
-            <span class="kpi-note">OR chuva <b id="kpi-or-subtext">—</b></span>
+            <span class="kpi-note" id="kpi-vitimas-note">OR chuva <b id="kpi-or-subtext">—</b></span>
         </div>
         <div class="kpi">
             <span class="kpi-label">Fatais</span>
@@ -147,6 +147,7 @@
                 <li><span class="sw sw-fatal sw-lg"></span>Fatal</li>
                 <li><span class="sw-ramp"></span>Densidade (baixa → alta)</li>
             </ul>
+            <p class="chart-notice" id="notice-mapa" style="display: none;"></p>
         </article>
 
         <article class="panel evidence" id="insights-panel">
@@ -159,7 +160,7 @@
 
             <table class="ct" aria-label="Tabela de contingência">
                 <thead>
-                    <tr><th></th><th>Com vítima</th><th>Sem vítima</th></tr>
+                    <tr><th></th><th id="ct-col-vitima">Com vítima</th><th>Sem vítima</th></tr>
                 </thead>
                 <tbody>
                     <tr><th>Pista molhada</th><td id="ct-a">—</td><td id="ct-b">—</td></tr>

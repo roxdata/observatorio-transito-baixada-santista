@@ -103,7 +103,9 @@ class DatabaseManager:
                 COALESCE(SUM(acidente_com_vitima), 0) as total_com_vitimas,
                 COALESCE(SUM(risco_pista_molhada), 0) as total_pista_molhada,
                 COALESCE(SUM(tipo_via_rodovia), 0) as total_rodovias,
-                ROUND(AVG(temperatura_c), 1) as temp_media
+                ROUND(AVG(temperatura_c), 1) as temp_media,
+                COALESCE(SUM(CASE WHEN acidente_com_vitima = 1 AND acidente_fatal = 0 THEN 1 ELSE 0 END), 0) as total_feridos_nao_fatais,
+                COALESCE(SUM(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0 THEN 1 ELSE 0 END), 0) as total_georref
             FROM acidentes {where};
         """
         row = self.con.execute(query).fetchone()
@@ -118,7 +120,11 @@ class DatabaseManager:
             "taxa_pista_molhada": round((row[3] / tot) * 100, 2),
             "total_rodovias": row[4],
             "taxa_rodovias": round((row[4] / tot) * 100, 2),
-            "temp_media": row[5] or 23.6
+            "temp_media": row[5] or 23.6,
+            "total_feridos_nao_fatais": row[6],
+            "total_georref": row[7],
+            "apenas_fatais_fonte": bool(row[2] > 0 and row[6] == 0),
+            "sem_georref_periodo": bool(row[0] > 0 and row[7] == 0)
         }
 
     def get_municipios_chart(self, ano=None, tipo_acidente=None, risco_pista_molhada=None,
@@ -369,10 +375,11 @@ class DatabaseManager:
                 diagnostico = f"Não há registros de sinistros para o filtro selecionado ({loc_texto}, {tempo_texto})."
             evidencia = "Sem ocorrências na tabela de contingência 2×2 para cálculo de Odds Ratio ou Qui-Quadrado."
         else:
+            apenas_fatais_fonte = bool(vitimas == fatais and vitimas > 0)
             nota_vit = ""
-            if vitimas == fatais and vitimas > 0:
+            if apenas_fatais_fonte:
                 nota_vit = (
-                    " Nota técnica RENAEST: a partir de março/2023 (e em 2024–2025), a SENATRAN deixou de exportar a "
+                    " Nota técnica RENAEST: em jan/2023 (carga retroativa) e de mar/2023 a 2025, a SENATRAN deixou de exportar a "
                     "contagem de feridos não fatais (qtde_feridosilesos = 0 e gravidade_lesao = 'NAO INFORMADO') para o Estado de São Paulo, "
                     "mantendo apenas o registro de óbitos (qtde_obitos > 0); por isso os sinistros com vítimas coincidem com os fatais neste período."
                 )
@@ -384,7 +391,13 @@ class DatabaseManager:
             )
 
             p_str = "p < 0,001" if p_val < 0.001 else f"p = {p_val:.3f}"
-            if odds_ratio >= 1.05:
+            if apenas_fatais_fonte:
+                evidencia = (
+                    f"Neste recorte, a tabela 2×2 (a={a}, b={b}, c={c}, d={d}; OR = {odds_ratio:.3f}; χ² = {chi2_val}, {p_str}) "
+                    f"mede exclusivamente óbitos, pois feridos leves e graves vieram como 'NAO INFORMADO' na base SENATRAN/RENAEST. "
+                    f"Para avaliação integral de H₁ (feridos + fatais), utilize períodos com classificação completa (2022, fev/2023 ou consolidado 2022–2025: OR = 1,601; p < 0,001)."
+                )
+            elif odds_ratio >= 1.05:
                 evidencia = (
                     f"Odds Ratio calculado em OR = {odds_ratio:.3f} (limiar: chuva_acum_3h > 5,0 mm — Theofilatos & Yannis, 2014; Edwards, 1998; WMO, 2018). "
                     f"Sob condições de chuva crítica e asfalto molhado, a chance relativa de sinistros com vítimas é +{elevacao_pct}% superior "
@@ -408,6 +421,7 @@ class DatabaseManager:
 
         return {
             "hipotese_validada": hipotese_confirmada,
+            "apenas_fatais_fonte": bool(vitimas == fatais and vitimas > 0),
             "odds_ratio": odds_ratio,
             "elevacao_risco_pct": elevacao_pct,
             "chi2": chi2_val,

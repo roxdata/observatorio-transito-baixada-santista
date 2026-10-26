@@ -274,6 +274,20 @@ async function updateKPIs() {
         document.getElementById('kpi-pct-chuva').innerText = `${fmtDec(d.taxa_pista_molhada, 1)}%`;
         document.getElementById('kpi-rodovias').innerText = fmtInt(d.total_rodovias);
         document.getElementById('kpi-pct-rodovias').innerText = `${fmtDec(d.taxa_rodovias, 1)}%`;
+
+        const noticeMapa = document.getElementById('notice-mapa');
+        if (noticeMapa) {
+            if (d.sem_georref_periodo) {
+                noticeMapa.style.display = 'block';
+                noticeMapa.innerHTML = `<strong>Nota espacial do período (Jan–Ago/2022):</strong> Os <b>${fmtInt(d.total_com_vitimas)}</b> sinistros com vítimas (${fmtInt(d.total_feridos_nao_fatais)} não fatais e ${fmtInt(d.total_fatais)} fatais) deste recorte estão integralmente contabilizados nos KPIs, gráficos e testes estatísticos, mas não exibem pontos no mapa porque o envio de coordenadas (<code>latitude/longitude</code>) pelo DETRAN-SP ao RENAEST iniciou-se em setembro/2022.`;
+            } else if (d.apenas_fatais_fonte) {
+                noticeMapa.style.display = 'block';
+                noticeMapa.innerHTML = `<strong>Nota da fonte oficial neste recorte:</strong> Em jan/2023 (carga retroativa) e de mar/2023 a 2025, a SENATRAN/RENAEST exportou os registros de SP com feridos não fatais classificados como <code>NAO INFORMADO</code> (<code>qtde_feridos = 0</code>), mantendo apenas os óbitos (<code>qtde_obitos &gt; 0</code>). Por isso, os pontos no mapa representam exclusivamente os <b>${fmtInt(d.total_fatais)} sinistros fatais</b>. Este aviso desaparece automaticamente ao selecionar períodos com classificação completa (Set–Dez/2022, Fev/2023 ou consolidado 2022–2025).`;
+            } else {
+                noticeMapa.style.display = 'none';
+                noticeMapa.innerHTML = '';
+            }
+        }
     } catch (e) {
         console.error('Erro ao atualizar KPIs:', e);
     }
@@ -458,6 +472,8 @@ async function updateChartSeveridade() {
         const [vSeca, vMol] = data.vitimas;
         const [totSeca, totMol] = data.totais_condicao || [0, 0];
         const [qVitSeca, qVitMol] = data.qtd_vitimas || [0, 0];
+        const [qFatSeca, qFatMol] = data.qtd_fatais || [0, 0];
+        const soFataisSev = (qVitSeca + qVitMol) > 0 && (qVitSeca + qVitMol) === (qFatSeca + qFatMol);
         const diff = vMol - vSeca;
 
         const noticeSev = document.getElementById('notice-severidade');
@@ -475,10 +491,13 @@ async function updateChartSeveridade() {
             if (noticeSev) {
                 if (totMol > 0 && qVitMol === 0) {
                     noticeSev.style.display = 'block';
-                    noticeSev.innerHTML = `<strong>Nota do recorte:</strong> Houve <strong>${fmtInt(totMol)} sinistros em pista molhada</strong> e <strong>${fmtInt(totSeca)} em pista seca</strong> neste período, porém os ${fmtInt(qVitSeca)} sinistros com vítimas/fatais concentraram-se em pista seca (${fmtInt(qVitMol)} vítimas em pista molhada = 0,0%).`;
+                    noticeSev.innerHTML = `<strong>Nota do recorte:</strong> Houve <strong>${fmtInt(totMol)} sinistros em pista molhada</strong> e <strong>${fmtInt(totSeca)} em pista seca</strong> neste período, porém os ${fmtInt(qVitSeca)} sinistros com vítimas/fatais concentraram-se em pista seca (${fmtInt(qVitMol)} vítimas em pista molhada = 0,0%).${soFataisSev ? ' Neste período a SENATRAN exportou apenas óbitos (feridos não fatais = NI).' : ''}`;
                 } else if (totMol === 0) {
                     noticeSev.style.display = 'block';
                     noticeSev.innerHTML = `<strong>Nota do recorte:</strong> Todos os ${fmtInt(totSeca)} sinistros deste recorte ocorreram em condição de pista seca (0 ocorrências em pista molhada).`;
+                } else if (soFataisSev) {
+                    noticeSev.style.display = 'block';
+                    noticeSev.innerHTML = `<strong>Nota do recorte:</strong> Neste período (jan/2023 ou mar/2023–2025), a SENATRAN exportou apenas óbitos para SP (feridos não fatais = <code>NI</code>), razão pela qual as colunas <em>Com vítima</em> e <em>Fatal</em> exibem a mesma proporção.`;
                 } else {
                     noticeSev.style.display = 'none';
                     noticeSev.innerHTML = '';
@@ -493,7 +512,7 @@ async function updateChartSeveridade() {
         chartSeveridade = new Chart(document.getElementById('chart-severidade'), {
             type: 'bar',
             data: {
-                labels: ['Com vítima', 'Fatal'],
+                labels: [soFataisSev ? 'Com vítima (= Fatal, feridos NI)' : 'Com vítima', 'Fatal'],
                 datasets: [
                     { label: `Pista seca (n=${fmtInt(totSeca)})`, data: [vSeca, data.fatais[0]], backgroundColor: alpha(0, C.dry), barPercentage: 0.8, categoryPercentage: 0.7 },
                     { label: `Pista molhada (n=${fmtInt(totMol)})`, data: [vMol, data.fatais[1]], backgroundColor: alpha(1, C.rain), barPercentage: 0.8, categoryPercentage: 0.7 }
@@ -693,8 +712,13 @@ async function updateInsights() {
         const scope = describeScope();
 
         // Veredito
+        const apenasFatais = Boolean(d.apenas_fatais_fonte);
+        const colVitima = document.getElementById('ct-col-vitima');
+        if (colVitima) colVitima.textContent = apenasFatais ? 'Vítima fatal (feridos NI)' : 'Com vítima';
+
         if (badge) {
             if (!hasOr) { badge.className = 'verdict refuted'; badge.textContent = 'sem registros no recorte'; }
+            else if (apenasFatais) { badge.className = 'verdict refuted'; badge.textContent = 'amostra apenas fatal (feridos NI na fonte)'; }
             else if (d.hipotese_validada) { badge.className = 'verdict confirmed'; badge.textContent = 'H₁ sustentada'; }
             else { badge.className = 'verdict refuted'; badge.textContent = 'H₁ não sustentada no recorte'; }
         }
@@ -703,6 +727,8 @@ async function updateInsights() {
         if (headline) {
             if (!hasOr) {
                 headline.innerHTML = `Sem registros de sinistros disponíveis ${scope} (ver nota metodológica no diagnóstico).`;
+            } else if (apenasFatais) {
+                headline.innerHTML = `${scope.charAt(0).toUpperCase() + scope.slice(1)}, a fonte SENATRAN registra apenas óbitos (feridos não fatais = <em>NI na origem</em>); razão de chances restrita a fatais (OR ${fmtDec(or, 2)}).`;
             } else if (or >= 1.05) {
                 headline.innerHTML = `Com chuva acima de 5 mm ou pista molhada, a chance de um sinistro ter vítimas é <em>${fmtDec(varPct, 0)}% maior</em> ${scope} (odds ratio ${fmtDec(or, 2)}).`;
             } else if (or <= 0.95) {
@@ -730,8 +756,14 @@ async function updateInsights() {
                 : '—';
         }
 
-        const kpiOr = document.getElementById('kpi-or-subtext');
-        if (kpiOr) kpiOr.textContent = hasOr ? `${fmtDec(or, 2)} (${varPct >= 0 ? '+' : ''}${fmtDec(varPct, 0)}%)` : '—';
+        const kpiNote = document.getElementById('kpi-vitimas-note');
+        if (kpiNote) {
+            if (apenasFatais && hasOr) {
+                kpiNote.innerHTML = `= fatais (feridos NI) · OR <b id="kpi-or-subtext">${fmtDec(or, 2)}</b>`;
+            } else {
+                kpiNote.innerHTML = `OR chuva <b id="kpi-or-subtext">${hasOr ? `${fmtDec(or, 2)} (${varPct >= 0 ? '+' : ''}${fmtDec(varPct, 0)}%)` : '—'}</b>`;
+            }
+        }
 
         document.getElementById('insight-evidencia').textContent = d.evidencia_estatistica || '';
         document.getElementById('insight-diagnostico').textContent = d.diagnostico || '';
